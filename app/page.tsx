@@ -9,10 +9,13 @@ export default function Home() {
         className="logo"
         src="/logo.png"
         alt="Ouaish Labs"
-        width={280}
-        height={280}
+        width={560}
+        height={560}
         priority
       />
+      <footer className="copyright">
+        &copy; {new Date().getFullYear()} Ouaish Labs
+      </footer>
     </main>
   );
 }
