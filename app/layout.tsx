@@ -7,6 +7,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ouaish.com"),
   title: "Ouaish Labs",
   description: "Ouaish Labs — Coming soon.",
   openGraph: {
