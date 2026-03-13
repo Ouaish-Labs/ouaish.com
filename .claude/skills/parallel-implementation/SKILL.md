@@ -5,36 +5,46 @@ description: Use when entering plan mode for any multi-file implementation task 
 
 # Parallel Implementation Skill
 
-Execute multi-file implementations using tiered models and wave-based parallelization.
+Execute multi-file implementations using tiered models, wave-based parallelization, and verified outcomes.
 
-## Model Assignment Rules
+## Enforcement Layers
+
+| Layer | What it catches | When it runs |
+|-------|----------------|--------------|
+| **PostToolUse hooks** (project-configured) | Syntax errors, undefined names | Every file edit, if configured |
+| **Wave gates** (this skill) | Logic errors, missing imports, failing tests | Between each wave |
+| **Pre-commit** (linters, type checkers) | Type errors, lint violations | At commit time (Phase 3) |
+| **Test→Stage→Commit gate** (this skill) | Untested code reaching commits | Phase 3 — never stage before testing |
+| **Review agents** (optional) | Dead code, silent failures, logic bugs | After commit — Phase C½ of /worktree-pr if used, otherwise run inline |
+
+> If your project has PostToolUse syntax hooks configured in `.claude/settings.json`, they run automatically on every edit.
+
+## Model Assignment
 
 | Task Type | Model | Examples |
 |-----------|-------|----------|
-| **Orchestration** | Opus (you) | Planning, coordination, final review |
-| **Architecture** | Sonnet | `feature-dev:code-architect` — design before implementation |
+| **Orchestration** | Opus (you) | Planning, coordination, wave gates, final review |
 | **Implementation** | Sonnet | Logic-heavy changes, new features, complex refactors |
 | **Mechanical** | Haiku | Import updates, renames, simple edits, file moves |
-| **Code Review** | Opus | `pr-review-toolkit:code-reviewer` or manual review |
 
 ## Required Workflow
 
 ```
 ┌─────────────────────────────────────────┐
 │  PHASE 0: ARCHITECTURE (code-architect) │
-│  - Launch feature-dev:code-architect    │
-│  - Analyze existing codebase patterns   │
-│  - Identify files to create/modify      │
-│  - Design component/data flow           │
-│  - Output: implementation blueprint     │
+│  - Dispatch feature-dev:code-architect  │
+│  - Agent reads ALL affected files       │
+│  - Returns: current state, imports,     │
+│    deps, recommended wave grouping      │
+│  YOU DO NOT SKIP THIS PHASE             │
 └─────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────┐
-│  PHASE 1: PLAN (Opus - you)             │
-│  - Use architect's blueprint as input   │
+│  PHASE 1: PLAN (Opus - you)            │
+│  - Use architect output to build plan   │
 │  - Group into waves by dependency       │
-│  - Assign model tiers to each task      │
+│  - Assign model tiers + Verify commands │
 └─────────────────────────────────────────┘
                     │
                     ▼
@@ -45,184 +55,183 @@ Execute multi-file implementations using tiered models and wave-based paralleliz
 │  ├─ [Sonnet] Implementation task A      │
 │  ├─ [Sonnet] Implementation task B      │
 │  └─ [Haiku] Mechanical task C           │
+│  *** WAVE GATE: run Verify commands *** │
 │                                         │
 │  Wave 2: Dependent tasks (parallel)     │
 │  ├─ [Sonnet] Task D (needs A)           │
 │  └─ [Haiku] Task E (needs B)            │
+│  *** WAVE GATE: run Verify commands *** │
 │                                         │
 │  Wave N: Continue until complete        │
 └─────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────┐
-│  PHASE 3: REVIEW (Opus)                 │
-│  - Run pr-review-toolkit:code-reviewer  │
-│  - Fix any issues found                 │
-│  - Run typecheck + tests                │
-│  - Verify no regressions                │
+│  PHASE 3: VERIFY + COMMIT (MANDATORY)   │
+│  1. Run your project's typecheck + lint │
+│  2. Run ALL relevant tests — confirm    │
+│     pass                                │
+│  3. Fix any failures, re-run checks     │
+│  4. ONLY THEN: stage → commit           │
+│  ⚠️ Order: test → stage → commit        │
+│  (Review agents run in /worktree-pr     │
+│   Phase C½, if used)                    │
 └─────────────────────────────────────────┘
 ```
 
 ## Phase 0: Architecture (MANDATORY)
 
-**Before writing any plan, launch `feature-dev:code-architect` to design the implementation.**
+**Before writing any plan, dispatch `feature-dev:code-architect` to design the implementation.**
 
-This agent analyzes existing codebase patterns, conventions, and architecture to produce a blueprint with:
-- Specific files to create and modify
-- Component designs and data flows
-- Build sequences respecting dependencies
-- Pattern conformance checks
+Without it, you're planning blind. You don't know line numbers, imports, or current state. Skip this and you risk rework when agents discover the codebase doesn't match expectations.
 
 ```
-Agent tool call:
-  subagent_type: feature-dev:code-architect
-  model: sonnet
-  prompt: |
-    Design the architecture for: [task description]
-
-    Analyze existing patterns in the codebase and provide:
-    1. Files to create/modify with specific changes
-    2. Component/module design
-    3. Data flow and dependencies
-    4. Build sequence (what depends on what)
+Agent(
+  subagent_type="feature-dev:code-architect",
+  model="sonnet",
+  prompt="Analyze these N files for [task]. Return: exact current state at relevant lines, needed imports, dependencies between changes, recommended wave grouping."
+)
 ```
-
-**Why this matters:** Without the architect phase, plans are based on assumptions about the codebase rather than analysis. The architect agent reads actual code, traces execution paths, and identifies patterns that inform better task decomposition. Skip this and you risk rework when agents discover the codebase doesn't match expectations.
 
 **When to skip Phase 0:** Only when you already have a detailed, file-level plan from the user (e.g., they've done the architecture work themselves and provided specific instructions per file).
 
 ## Plan Template
-
-When planning, structure your output like this:
 
 ```markdown
 ## Architecture Summary
 [Key findings from code-architect: patterns, conventions, critical files]
 
 ## Scope
-- X files to modify
-- Y new files to create
+- X files to modify, Y new files to create
 - Key changes: [summary]
 
 ## Wave 1 (Parallel)
-| Task | Model | Files | Reason |
-|------|-------|-------|--------|
-| [Description] | Sonnet | file1.ts, file2.ts | [Why this model] |
-| [Description] | Haiku | file3.ts | Simple import update |
+| Task | Model | Files | Conflicts | Verify |
+|------|-------|-------|-----------|--------|
+| [Description] | Sonnet | file1, file2 | none | run unit tests for file1 → all pass |
+| [Description] | Haiku | file3 | none | grep for expected string in file3 → found |
 
 ## Wave 2 (Depends on Wave 1)
-| Task | Model | Files | Depends On |
-|------|-------|-------|------------|
-| [Description] | Sonnet | file4.ts | Wave 1 Task 1 |
+| Task | Model | Files | Conflicts | Verify |
+|------|-------|-------|-----------|--------|
+| [Description + tests] | Sonnet | file4, tests/test_file4 | none | run unit tests for file4 → all pass |
 
-## Verification
-- [ ] TypeScript passes
-- [ ] Tests pass
+## Verification (global)
+- [ ] All wave gates passed (lint + typecheck + tests at each gate)
+- [ ] Typecheck passes
+- [ ] Full test suite passes
 - [ ] Lint passes
-- [ ] Code review complete
+- [ ] Code review complete (via /worktree-pr Phase C½, or inline if not using worktrees)
 ```
+
+### Verify Column Rules
+
+- Every task MUST have a Verify command that Opus can run after the wave completes
+- Verify must be a **runnable command with an observable exit code or output** — not a description of intent
+- "Looks correct" is NOT verification. `pytest tests/test_foo.py -v` exits 0 IS verification.
+- For implementation tasks: lint + import check at minimum
+- For tasks that include tests: run the specific test file
+- For mechanical tasks: `grep` for the expected change
+
+### Conflicts Column Rules
+
+- Every task MUST have a Conflicts entry
+- List any file that also appears in another task's Files column in the same wave
+- If two tasks in the same wave list the same file, the plan is invalid — move one task to the next wave
+- If no overlap exists, write `none`
+
+## Commit Sequence is Non-Negotiable
+
+Tests pass → `git add` → `git commit`
+
+**NEVER** stage before testing. **NEVER** commit without running tests first.
+
+If you have already staged files and need to re-test, unstage first:
+
+```
+git restore --staged .
+```
+
+Then re-run tests. Only after they pass: stage → commit.
 
 ## Dispatching Agents
 
-**Critical:** Launch all tasks in a wave with a SINGLE message containing multiple Task tool calls.
+**Critical:** Launch all tasks in a wave with a SINGLE message containing multiple Agent tool calls.
 
-```typescript
-// CORRECT - Parallel execution
-<Task model="sonnet" description="Implement feature A">...</Task>
-<Task model="sonnet" description="Implement feature B">...</Task>
-<Task model="haiku" description="Update imports">...</Task>
-// All three run concurrently
+```
+// CORRECT - Parallel execution (single message, multiple tool calls)
+Agent(model="sonnet", description="Implement feature A", prompt="...")
+Agent(model="sonnet", description="Implement feature B", prompt="...")
+Agent(model="haiku", description="Update imports", prompt="...")
 
 // WRONG - Sequential execution (wastes time)
-<Task>A</Task>
-// wait
-<Task>B</Task>
-// wait
+Agent(...A...)  // wait for result
+Agent(...B...)  // wait for result
 ```
 
-## Model Selection Guide
+### Test-Adjacent Implementation
 
-**Use Sonnet when:**
-- Writing new functions/components
-- Refactoring existing logic
-- Complex file modifications
-- Anything requiring reasoning about code structure
+When a task creates new logic, the SAME agent writes both the implementation AND its tests. The agent's Verify step runs the tests. This avoids:
+- A separate "write tests" wave (token cost)
+- Tests written by a different agent that misunderstands the implementation
+- Implementation without any verification
 
-**Use Haiku when:**
-- Updating import statements
-- Renaming variables/functions
-- Moving files
-- Simple find-and-replace patterns
-- Deleting unused code
+**Exception:** When tests need fixtures/infrastructure that doesn't exist yet, split into Wave 1 (fixtures) → Wave 2 (implementation + tests).
 
-**Use Opus (yourself) when:**
-- Planning and coordination
-- Fixing TypeScript/test failures after waves complete
-- Final code review
-- Complex debugging
+### Before Writing Tests
 
-## Agent Prompt Best Practices
+**Read the project's test style guide before writing any test code.** Check CLAUDE.md for the path to the project's test style guide. Include the style guide rules in every agent prompt that writes tests.
 
-Give agents:
-1. **Specific scope** - Exact files to modify
-2. **Clear goal** - What success looks like
-3. **Context** - Related code patterns, conventions (from architect output)
-4. **Constraints** - What NOT to change
+## Wave Gate
 
-### Before writing tests
+After each wave's agents complete, Opus runs every task's Verify command before starting the next wave.
 
-**Read the project's test style guide before writing any test code.** Check CLAUDE.md for the path (e.g. `docs/test-style-guide.md`). Verify each test conforms to it — don't treat test-writing as a mechanical task that skips convention checks. When dispatching agents to write tests, include the style guide rules in the agent prompt.
+```
+Wave N agents complete
+        │
+        ▼
+  WAVE GATE (Opus - you)
+  1. Run each task's Verify command
+  2. Run global checks (use your project's tools):
+     a. Lint and format
+     b. Typecheck (catches type errors before they
+        cascade to the next wave)
+     c. Run affected tests
+  3. Update progress table
+  4. If any fail:
+     - Attempt fix (max 2 tries)
+     - Re-run the failed check
+     - If still failing: ask user
+  5. ALL verifications pass → next wave
+```
+
+### Progress Table
+
+After each wave gate, update this table in your response:
 
 ```markdown
-# Good agent prompt
-Migrate `app/src/components/CreateForm.tsx` to use react-number-format.
-
-## Requirements
-- Replace TextField numeric inputs with NumericFormat
-- Use `onValueChange` with `values.floatValue`
-- Currency fields: prefix="$", thousandSeparator
-- Preserve existing validation logic
-
-## Files
-- Only modify: CreateForm.tsx
-
-## Do NOT
-- Change other components
-- Modify test files
-- Add new dependencies
+## Progress
+| Wave | Task | Status | Verify Result |
+|------|------|--------|---------------|
+| 1 | Add validation service | ✅ | lint: pass, import: pass, pytest: 3/3 |
+| 1 | Update route handler | ✅ | lint: pass, grep: found expected pattern |
+| 2 | Integration tests | ❌ | pytest: 2/4 fail — KeyError on line 42 |
 ```
 
-## After All Waves Complete
+## Phase 3: Verify + Commit (MANDATORY)
 
-1. **Run TypeScript check:** `npm run typecheck`
-2. **Run tests:** `npm test`
-3. **Run lint:** `npm run lint`
-4. **Launch code review:**
-   ```
-   Task: pr-review-toolkit:code-reviewer
-   Prompt: Review all changes from this implementation for issues
-   ```
-5. **Fix any issues found**
-6. **Commit only when verification passes**
+Phase 3 runs execution-based checks only. Review agents (code-reviewer, silent-failure-hunter, etc.) run later — in `/worktree-pr` Phase C½ with fresh context, if you are using that skill. If you are not using worktree-pr, dispatch them inline after committing but before pushing.
 
-## Token Efficiency
+1. Run your project's typecheck command
+2. Run your project's lint command
+3. Run ALL relevant tests — confirm pass
+4. Fix any failures, then re-run typecheck + lint + tests
+5. ONLY THEN: `git add <files>` → `git commit`
 
-This workflow optimizes token usage:
+⚠️ Order is: **test → stage → commit**. NEVER stage then test.
 
-| Model | Cost Factor | Use For |
-|-------|-------------|---------|
-| Haiku | 1x (cheapest) | 30-40% of tasks (mechanical) |
-| Sonnet | 5x | 50-60% of tasks (implementation + architecture) |
-| Opus | 15x | 10% of tasks (review only) |
+## References
 
-**Result:** 50-70% cost reduction vs. Opus-only execution
-
-## Checklist Before Exiting Plan Mode
-
-- [ ] `feature-dev:code-architect` launched and blueprint reviewed (or user provided detailed plan)
-- [ ] All files identified and grouped into waves
-- [ ] Each task assigned a model tier (Haiku/Sonnet)
-- [ ] Dependencies between waves documented
-- [ ] Verification steps defined
-- [ ] No circular dependencies between waves
-- [ ] Test style guide read and rules noted for test-writing waves
+For detailed guidance, see `references/` in this skill directory:
+- `references/agent-prompt-guide.md` — Agent prompt structure, model selection guide, token efficiency, example prompts
+- `references/checklists.md` — Pre-plan checklist, post-implementation checklist, review skip red flags
