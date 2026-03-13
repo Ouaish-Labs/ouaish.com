@@ -26,6 +26,9 @@ Execute multi-file implementations using tiered models, wave-based parallelizati
 | **Orchestration** | Opus (you) | Planning, coordination, wave gates, final review |
 | **Implementation** | Sonnet | Logic-heavy changes, new features, complex refactors |
 | **Mechanical** | Haiku | Import updates, renames, simple edits, file moves |
+| **Code review** | Sonnet minimum | PR review agents, re-review of fix commits, any judgment task |
+
+> Model tier reflects the **type of reasoning required**, not the size of the input. A 3-line fix commit still requires judgment about correctness, intent, and side effects — that's Sonnet-minimum work. **Never use Haiku for any form of code review.**
 
 ## Required Workflow
 

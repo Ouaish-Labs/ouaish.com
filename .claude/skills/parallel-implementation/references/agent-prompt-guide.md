@@ -8,6 +8,7 @@ Give agents:
 3. **Context** — Related code patterns and conventions (from architect output)
 4. **Constraints** — What NOT to change
 5. **Verification** — Command to run + expected result. Agent MUST run this before reporting done.
+6. **Debugging budget** — 3 failed attempts → STOP and report. Do not keep retrying.
 
 ## Test-Adjacent Implementation
 
@@ -39,6 +40,9 @@ When a task creates new logic, the SAME agent writes both the implementation AND
 ## Do NOT
 - Change other services
 - Add new dependencies
+
+## Debugging Budget
+If a verify step fails: fix and retry. After 3 failed attempts on the same check, STOP. Report what you tried, what the error was, and what you believe the root cause is. Do not keep retrying.
 
 ## Verify (run before reporting done)
 1. Lint check on modified file → exit 0
