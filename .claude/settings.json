@@ -1,0 +1,98 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/bash_safety.py",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/change_requires_test.py",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/directory_boundary.py",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/exception_handler_validator.py",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/file_protection.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/ci_monitor.py",
+            "timeout": 30000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/output_limiter.py",
+            "timeout": 30000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/pytest_marker.py",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/ruff_syntax_check.py",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

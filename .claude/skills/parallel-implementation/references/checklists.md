@@ -2,7 +2,8 @@
 
 ## Before Exiting Plan Mode
 
-- [ ] **Phase 0 completed** — code-architect agent dispatched and returned file analysis
+- [ ] **Phase 0 completed** — code-architect agent dispatched and returned file analysis (including scope findings)
+- [ ] **Phase 0½ completed (if epic)** — scope findings classified, dependency issues auto-created, systemic findings presented to human, scope confirmed
 - [ ] All files identified and grouped into waves (using architect output, not guesses)
 - [ ] Each task assigned a model tier (Haiku/Sonnet)
 - [ ] **Every task has a Verify column** with a runnable command and expected result

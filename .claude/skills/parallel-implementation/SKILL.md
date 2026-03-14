@@ -33,53 +33,43 @@ Execute multi-file implementations using tiered models, wave-based parallelizati
 ## Required Workflow
 
 ```
-┌─────────────────────────────────────────┐
-│  PHASE 0: ARCHITECTURE (code-architect) │
-│  - Dispatch feature-dev:code-architect  │
-│  - Agent reads ALL affected files       │
-│  - Returns: current state, imports,     │
-│    deps, recommended wave grouping      │
-│  YOU DO NOT SKIP THIS PHASE             │
-└─────────────────────────────────────────┘
+PHASE 0: ARCHITECT ──────────────────────────────
+  Dispatch feature-dev:code-architect
+  Agent reads ALL affected files
+  Returns: current state, imports, deps, wave grouping
+  + Returns scope findings (problems beyond filed issues)
+  YOU DO NOT SKIP THIS PHASE
                     │
                     ▼
-┌─────────────────────────────────────────┐
-│  PHASE 1: PLAN (Opus - you)            │
-│  - Use architect output to build plan   │
-│  - Group into waves by dependency       │
-│  - Assign model tiers + Verify commands │
-└─────────────────────────────────────────┘
+PHASE 0½: SCOPE VALIDATION + DISCOVERY GATE ────
+  Compare architect findings against epic issue list
+  Directly related gaps → auto-create issues (audit-finding)
+  Systemic findings → present to human for decision
+  *** HUMAN GATE: confirm scope before Wave 1 ***
+  (Skip if no parent epic — single-issue or ad-hoc task)
                     │
                     ▼
-┌─────────────────────────────────────────┐
-│  PHASE 2: EXECUTE WAVES                 │
-│                                         │
-│  Wave 1: Independent tasks (parallel)   │
-│  ├─ [Sonnet] Implementation task A      │
-│  ├─ [Sonnet] Implementation task B      │
-│  └─ [Haiku] Mechanical task C           │
-│  *** WAVE GATE: run Verify commands *** │
-│                                         │
-│  Wave 2: Dependent tasks (parallel)     │
-│  ├─ [Sonnet] Task D (needs A)           │
-│  └─ [Haiku] Task E (needs B)            │
-│  *** WAVE GATE: run Verify commands *** │
-│                                         │
-│  Wave N: Continue until complete        │
-└─────────────────────────────────────────┘
+PHASE 1: PLAN (Opus) ───────────────────────────
+  Use architect output to build plan
+  Group into waves by dependency
+  Assign model tiers + Verify commands
                     │
                     ▼
-┌─────────────────────────────────────────┐
-│  PHASE 3: VERIFY + COMMIT (MANDATORY)   │
-│  1. Run your project's typecheck + lint │
-│  2. Run ALL relevant tests — confirm    │
-│     pass                                │
-│  3. Fix any failures, re-run checks     │
-│  4. ONLY THEN: stage → commit           │
-│  ⚠️ Order: test → stage → commit        │
-│  (Review agents run in /worktree-pr     │
-│   Phase C½, if used)                    │
-└─────────────────────────────────────────┘
+PHASE 2: EXECUTE WAVES ─────────────────────────
+  Wave 1: Independent tasks (parallel)
+  *** WAVE GATE: run Verify commands ***
+  Wave 2: Dependent tasks (parallel)
+  *** WAVE GATE: run Verify commands ***
+  Wave N: Continue until complete
+                    │
+                    ▼
+PHASE 3: VERIFY + COMMIT (MANDATORY) ──────────
+  1. Run typecheck + lint
+  2. Run ALL relevant tests → confirm pass
+  3. Fix any failures, re-run checks
+  4. ONLY THEN: stage → commit
+  ⚠️  Order: test → stage → commit. NEVER stage then test.
+  Review agents run in /worktree-pr Phase C½ (not here)
 ```
 
 ## Phase 0: Architecture (MANDATORY)
@@ -88,15 +78,126 @@ Execute multi-file implementations using tiered models, wave-based parallelizati
 
 Without it, you're planning blind. You don't know line numbers, imports, or current state. Skip this and you risk rework when agents discover the codebase doesn't match expectations.
 
+**When working from an epic or issue list**, the architect prompt MUST include scope discovery:
+
 ```
-Agent(
-  subagent_type="feature-dev:code-architect",
-  model="sonnet",
-  prompt="Analyze these N files for [task]. Return: exact current state at relevant lines, needed imports, dependencies between changes, recommended wave grouping."
-)
+Agent(subagent_type="feature-dev:code-architect", model="sonnet",
+      prompt="Analyze these N files for [task].
+
+## Requirements
+[Issue list from epic, or single issue body]
+
+## Return
+1. Exact current state at relevant lines
+2. Needed imports
+3. Dependencies between changes
+4. Recommended wave grouping
+5. **Scope findings:** While analyzing these files, note ANY problems you see
+   that are NOT covered by the requirements above. Categorize each as:
+   - (a) DEPENDENCY: Can't complete a filed issue without fixing this
+   - (b) SYSTEMIC: Related problem in the same files, but not required
+   Report these in a separate 'Scope Findings' section at the end.")
 ```
 
-**When to skip Phase 0:** Only when you already have a detailed, file-level plan from the user (e.g., they've done the architecture work themselves and provided specific instructions per file).
+**When working from a single task (no epic):** The scope findings section is optional. Phase 0½ is skipped.
+
+**When to skip Phase 0:** Only when you already have a detailed, file-level plan from the user.
+
+## Phase 0½: Scope Validation + Discovery Gate
+
+**Skip this phase if:** There is no parent epic (single-issue or ad-hoc task). Go directly to Phase 1.
+
+**Run this phase if:** The work is linked to an epic with a checklist of issues (created via `/create-issue` epic workflow).
+
+After the architect returns, compare its scope findings against the epic's issue list:
+
+**Step 1: Fetch the epic checklist.**
+
+```bash
+gh issue view <epic-number> --json body -q '.body'
+```
+
+Parse the `## Issues` checklist to get the list of filed issues.
+
+**Step 2: Classify architect findings.**
+
+| Category | Criteria | Action |
+|----------|----------|--------|
+| **(a) DEPENDENCY** | Architect says "can't complete issue #X without fixing this" | Auto-create issue, tag `audit-finding`, add to epic checklist |
+| **(b) SYSTEMIC** | Related problem, not required for filed issues | Present to human for decision |
+| **Already covered** | Finding matches an existing filed issue | No action needed |
+
+**Step 3: Auto-create dependency issues.**
+
+For category (a) findings — these are scope correction, not scope expansion:
+
+```bash
+gh issue create --title "Audit: [Brief description]" \
+  --label "audit-finding" \
+  --label "epic/<epic-slug>" \
+  --body "## Description
+[Finding from architect]
+
+## Discovery Context
+Found during Phase 0 of epic #<epic-number>.
+This is a dependency — cannot complete #<blocked-issue> without fixing this.
+
+## Files Affected
+[From architect output]"
+```
+
+Update the epic checklist to include the new issue.
+
+**Step 4: Present systemic findings to human (BLOCKING GATE).**
+
+For category (b) findings:
+
+```
+Phase 0 Scope Validation — Epic #<number>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Filed issues (in scope):
+  ✅ #101 — Fix dark mode toggle regression
+  ✅ #102 — Button brand color token
+  🆕 #106 — Theme provider needs dark mode var (auto-created, dependency of #101)
+
+Systemic findings (need your decision):
+  1. Text base color uses hardcoded value instead of theme token
+     Files: src/components/Text.tsx:14
+     → Add to epic? [yes/defer]
+
+Options:
+  a) Add selected findings to epic (creates issues, adds to checklist)
+  b) Defer all to follow-up (creates issues tagged 'deferred', not in epic)
+  c) Proceed without changes (filed issues only)
+```
+
+**Wait for human response.** Do not proceed to Phase 1 until this gate resolves.
+
+- **"yes" on specific items:** Create issues, add to epic checklist, include in Phase 1 plan.
+- **"defer":** Create issues tagged `deferred` + `audit-finding`. They exist in the tracker but are NOT in this epic's scope.
+- **"proceed without changes":** Go to Phase 1 with original issue list only. Systemic findings are still created as deferred issues so they're tracked.
+
+**The principle: nothing discovered is ever silently dropped.** Every finding becomes a GitHub issue — the only question is whether it's in THIS epic or deferred to a future one.
+
+**Step 5: Confirm final scope.**
+
+```
+Scope confirmed for Epic #<number>:
+  In scope: #101, #102, #103, #106 (4 issues)
+  Deferred: #107, #108 (2 issues, tracked separately)
+
+Proceeding to Phase 1 (planning).
+```
+
+### Epic Mode: fixed-scope vs discovery
+
+The epic body includes a `## Mode` field set during `/create-issue` epic creation:
+
+- **fixed-scope:** Phase 0½ only auto-creates dependency issues (category a). Systemic findings (category b) are auto-deferred without prompting the human. Default for bug-fix epics.
+- **discovery:** Phase 0½ presents all findings to the human. For audit-driven or exploratory work.
+
+If the epic has no Mode field, default to **fixed-scope** (safer).
 
 ## Plan Template
 
