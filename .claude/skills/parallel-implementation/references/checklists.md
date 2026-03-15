@@ -16,15 +16,13 @@
 
 - [ ] **Plan reconciliation completed** — every Verify item from Phase 1 plan confirmed executed (not just "tests pass" — the SPECIFIC tests/checks listed in the plan)
 - [ ] **All wave gates passed** — every task's Verify command exited successfully
-- [ ] **Global checks passed at every wave gate** — lint, typecheck, and affected tests all green
 - [ ] **Progress table shows all checkmarks** — no unresolved failures
 - [ ] **No plan-execution divergence** — if the plan promised equivalence tests, integration tests, or specific assertions, they were actually written and run (not silently dropped from agent prompts)
-- [ ] **Typecheck passes** — run after all waves, before staging anything
-- [ ] **Lint passes** — run after all waves, before staging anything
-- [ ] **All relevant tests pass** — run after all waves, before staging anything
-- [ ] **Commit sequence followed**: tests pass → `git add` → `git commit` — never staged before testing
+- [ ] **code-reviewer agent dispatched** — not skipped, not "I'll do it later"
+- [ ] **silent-failure-hunter agent dispatched** — in parallel with code-reviewer
+- [ ] All issues from review agents FIXED (not just acknowledged)
+- [ ] Typecheck + lint passes AFTER fixes
 - [ ] THEN and ONLY THEN: commit
-- [ ] **Review agents** — if not using /worktree-pr Phase C½, dispatch code-reviewer and silent-failure-hunter inline now
 
 ## Red Flags — You Are About to Skip Review
 
@@ -46,3 +44,4 @@
 | "This is mechanical / low risk" | You're classifying risk BEFORE the investigation that would reveal risk. |
 | "Lint + typecheck pass, we're good" | Lint checks syntax. Tests check behavior. Not interchangeable. |
 | "I'll mention it to the user later" | You won't. File an issue or add to the plan NOW. |
+| "External reviewers probably haven't commented" | They may comment within seconds. Check, don't assume. |
