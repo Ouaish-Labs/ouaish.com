@@ -14,9 +14,11 @@
 
 ## After All Waves Complete (Phase 3 Gate)
 
+- [ ] **Plan reconciliation completed** — every Verify item from Phase 1 plan confirmed executed (not just "tests pass" — the SPECIFIC tests/checks listed in the plan)
 - [ ] **All wave gates passed** — every task's Verify command exited successfully
 - [ ] **Global checks passed at every wave gate** — lint, typecheck, and affected tests all green
 - [ ] **Progress table shows all checkmarks** — no unresolved failures
+- [ ] **No plan-execution divergence** — if the plan promised equivalence tests, integration tests, or specific assertions, they were actually written and run (not silently dropped from agent prompts)
 - [ ] **Typecheck passes** — run after all waves, before staging anything
 - [ ] **Lint passes** — run after all waves, before staging anything
 - [ ] **All relevant tests pass** — run after all waves, before staging anything
@@ -33,3 +35,14 @@
 | "It's a small change" | Small changes have inverted defaults and dead code too. |
 | "I'll review after pushing" | Review catches issues BEFORE they go to CI, not after. |
 | "The agents will just say LGTM" | Then it takes 2 minutes and costs nothing. Run them. |
+
+## Red Flags — You're About to Drop Planned Work
+
+| Thought | Reality |
+|---------|---------|
+| "The deadline is tight, skip the equivalence tests" | Tell the user it takes longer. Don't silently drop verification. |
+| "Golden path tests cover it" | Golden path tests hit 3-4 code paths. The service may have 17. |
+| "I already know these files, skip Phase 0" | You know what you read. You don't know what you didn't look for. |
+| "This is mechanical / low risk" | You're classifying risk BEFORE the investigation that would reveal risk. |
+| "Lint + typecheck pass, we're good" | Lint checks syntax. Tests check behavior. Not interchangeable. |
+| "I'll mention it to the user later" | You won't. File an issue or add to the plan NOW. |

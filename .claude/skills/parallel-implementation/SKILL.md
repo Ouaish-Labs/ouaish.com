@@ -324,13 +324,32 @@ After each wave gate, update this table in your response:
 
 ## Phase 3: Verify + Commit (MANDATORY)
 
-Phase 3 runs execution-based checks only. Review agents (code-reviewer, silent-failure-hunter, etc.) run later — in `/worktree-pr` Phase C½ with fresh context, if you are using that skill. If you are not using worktree-pr, dispatch them inline after committing but before pushing.
+Phase 3 runs plan reconciliation, execution-based checks, then commits. Review agents (code-reviewer, silent-failure-hunter, etc.) run later — in `/worktree-pr` Phase C½ with fresh context, if you are using that skill. If you are not using worktree-pr, dispatch them inline after committing but before pushing.
+
+```
+0. PLAN RECONCILIATION (mandatory — catches plan-execution divergence):
+   a. Re-read the Phase 1 plan's Verify column for every task
+   b. For each Verify item: confirm it was actually executed and passed
+   c. If any Verify item was NOT run (agent prompt omitted it,
+      wave gate skipped it, etc.) → run it now
+   d. Report: "Plan had N verify items. N executed during waves.
+      M executed now in reconciliation. K still failing."
+   e. If K > 0: fix failures before proceeding
 
 1. Run your project's typecheck command
 2. Run your project's lint command
 3. Run ALL relevant tests — confirm pass
 4. Fix any failures, then re-run typecheck + lint + tests
-5. ONLY THEN: `git add <files>` → `git commit`
+5. ONLY THEN: git add <files> → git commit
+```
+
+**Plan reconciliation is non-negotiable.** This catches the failure mode where the plan promises verification steps (equivalence tests, integration tests, specific assertions) but agent prompts silently dropped them. The plan's Verify column is a contract — Phase 3 enforces it.
+
+Common plan-execution divergences to watch for:
+- Plan says "equivalence tests" → agent prompt said "golden path tests only"
+- Plan says "test all N converted queries" → agent tested 3 of 17
+- Plan says "verify Docker execution" → agent verified imports only
+- Plan says "check external reviewer comments" → agent skipped review loop
 
 ⚠️ Order is: **test → stage → commit**. NEVER stage then test.
 
