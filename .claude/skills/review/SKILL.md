@@ -5,7 +5,15 @@ description: Code review workflows using pr-review-toolkit agents
 
 # Code Review Skill
 
-## Full PR Review
+## Automated Review Loop (Phase C½)
+
+When using `/worktree-pr`, review agents run automatically after the PR is posted — as Phase C½. The orchestrator dispatches `code-reviewer`, `silent-failure-hunter`, and `pr-test-analyzer` (plus conditional agents) with fresh context, then a fixer agent addresses findings. Up to 3 rounds.
+
+**You do NOT need to manually run `/review` after `/worktree-pr` — it's built in.**
+
+## Manual PR Review
+
+For standalone review (outside of `/worktree-pr`):
 
 **Preferred method:**
 

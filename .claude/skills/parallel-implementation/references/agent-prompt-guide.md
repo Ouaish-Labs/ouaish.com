@@ -106,3 +106,5 @@ If a verify step fails: fix and retry. After 3 failed attempts on the same check
 | Opus | 15x | 10% of tasks (orchestration + review only) |
 
 **Result:** 50–70% cost reduction vs. Opus-only execution
+
+**This table applies to implementation tasks only.** Code review (Phase C½ of `/worktree-pr`) requires Sonnet minimum — see the hybrid model strategy in that skill. "Small diff" ≠ "mechanical task." Model tier is determined by the type of reasoning, not input size. **Never use Haiku for any review task.**
