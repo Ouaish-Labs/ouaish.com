@@ -351,6 +351,37 @@ Common plan-execution divergences to watch for:
 - Plan says "verify Docker execution" → agent verified imports only
 - Plan says "check external reviewer comments" → agent skipped review loop
 
+### Pre-commit entry checklist (mandatory)
+
+Before staging files, fill out this checklist by **running the commands and pasting the output**. No yes/no fields — every item requires live data that can only come from actually running the command.
+
+```
+Pre-commit checklist:
+
+1. Architect agent ID: ___
+   (paste the agent ID returned from Phase 0 dispatch — if missing, Phase 0 was skipped)
+
+2. Plan reconciliation — paste verify commands and results:
+   ┌─────────────────────────────────────────────────
+   │ Plan Verify item              │ Ran? │ Result
+   │ ruff check src/services/...   │  Y   │ exit 0
+   │ pytest tests/test_foo.py      │  Y   │ 4/4 pass
+   │ ...                           │      │
+   └─────────────────────────────────────────────────
+   (every row from the Phase 1 plan's Verify column must appear here)
+
+3. Paste last 5 lines of test output:
+   ___
+   (the orchestrator can re-run to verify — this catches "tests: pass" claims without running them)
+
+4. Paste lint + typecheck exit codes:
+   lint: ___    typecheck: ___
+```
+
+**Why paste, not report:** A model can write "✅ pass" without running the command. It cannot fabricate test output that matches the actual test suite without running the tests. Pasting live output is fabrication-resistant.
+
+**If any item is blank or shows failures, you must fix it or explain to the user why you're committing anyway.**
+
 ⚠️ Order is: **test → stage → commit**. NEVER stage then test.
 
 ## References
