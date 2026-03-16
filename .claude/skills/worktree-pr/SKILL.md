@@ -11,6 +11,28 @@ All planning, implementation, testing, and commit is delegated to `/parallel-imp
 
 **Announce at start:** "I'm using the worktree-pr skill to implement this in an isolated worktree and submit as a PR."
 
+## Hook Dependency Check
+
+Before starting, verify the enforcement hooks are installed. These hooks make the workflow gates described below actually work — without them, the gates are prose instructions only.
+
+```bash
+# Check for required hooks
+for hook in agent_recorder.py workflow_gate.py agent_gate.py; do
+  if [ ! -f ".claude/hooks/$hook" ]; then
+    echo "WARNING: $hook not installed — workflow gates will not enforce"
+  fi
+done
+```
+
+If any hooks are missing, install them:
+```bash
+# From the project root:
+gh api repos/Ouaish-Labs/claude-skills/contents/install.sh \
+  -H "Accept: application/vnd.github.raw+json" | bash -s -- --hooks --scripts
+```
+
+**If hooks cannot be installed** (e.g., no access to the repo), the skill still works — but enforcement is trust-based instead of infrastructure-enforced. All the "workflow_gate.py will block..." callouts become prose guidelines only.
+
 ## Required Workflow
 
 ```
