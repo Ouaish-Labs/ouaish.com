@@ -57,6 +57,16 @@
           {
             "type": "command",
             "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/workflow_gate.py",
+            "timeout": 15000
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/agent_gate.py",
             "timeout": 5000
           }
         ]

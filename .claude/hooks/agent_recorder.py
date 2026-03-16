@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-Claude Code PostToolUse Hook: Record Agent dispatches and key Bash events.
+Claude Code PostToolUse Hook: Record Agent dispatches to .session/agents.json.
 
 Automatically tracks every Agent tool call — subagent_type, model, agent_id,
-timestamp — to .session/agents.json. Also records pytest runs, gh api calls,
-and gh pr create/comment to .session/events.json.
-
-The workflow_gate.py PreToolUse hook reads these files to verify that required
-phases (Phase 0 architect, Phase C½ review agents) actually ran.
+timestamp. The workflow_gate.py PreToolUse hook reads this file to verify
+that required phases (Phase 0 architect, Phase C½ review agents) actually ran.
 
 The model cannot fake this record. Only a real Agent dispatch triggers
 PostToolUse, so only real dispatches appear in agents.json.
+
+Also records Bash events: pytest runs, gh api calls, gh pr create/comment.
+
+Worktree-aware: resolves .session/ from the command's cd prefix or the
+agent prompt's Working directory reference, so each worktree gets its own
+session data.
 
 Exit codes:
 - 0: Always (PostToolUse hooks should not block)
@@ -22,9 +25,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-SESSION_DIR = Path(".session")
-AGENTS_FILE = SESSION_DIR / "agents.json"
-EVENTS_FILE = SESSION_DIR / "events.json"
 DEBUG_LOG = Path(__file__).parent / "hook_debug.log"
 
 
@@ -36,14 +36,56 @@ def log_debug(message: str):
         pass
 
 
-def ensure_session_dir():
+def resolve_session_dir(input_data: dict) -> Path:
+    """Determine the correct .session/ directory for this tool call.
+
+    Hooks always run from the main repo CWD, but the agent/command may target
+    a worktree. We check in order:
+    1. Parse 'cd <path>' prefix from Bash commands
+    2. Check the agent prompt for 'cd <path>' or 'Working directory: <path>'
+    3. Check the 'cwd' field in the hook input (if Claude Code provides it)
+    4. Fall back to CWD (main repo)
+    """
+    tool_name = input_data.get("tool_name", "")
+    tool_input = input_data.get("tool_input", {})
+
+    # For Bash: extract cd target from command
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        cd_match = re.match(r"cd\s+(~?/[^\s;&|]+)", command)
+        if cd_match:
+            cd_path = Path(cd_match.group(1)).expanduser()
+            if cd_path.is_dir() and (cd_path / ".session").is_dir():
+                return cd_path / ".session"
+
+    # For Agent: check the prompt for worktree path
+    if tool_name == "Agent":
+        prompt = tool_input.get("prompt", "")
+        wt_match = re.search(r"(?:Working directory|cd)\s*:?\s*(~/Developer/[^\s.]+)", prompt)
+        if wt_match:
+            wt_path = Path(wt_match.group(1)).expanduser()
+            if wt_path.is_dir() and (wt_path / ".session").is_dir():
+                return wt_path / ".session"
+
+    # Check 'cwd' field (may be provided by Claude Code)
+    cwd = input_data.get("cwd", "")
+    if cwd:
+        cwd_path = Path(cwd)
+        if (cwd_path / ".session").is_dir():
+            return cwd_path / ".session"
+
+    # Fall back to current working directory
+    return Path(".session")
+
+
+def ensure_session_dir(session_dir: Path):
     """Create .session/ if it doesn't exist."""
-    SESSION_DIR.mkdir(exist_ok=True)
+    session_dir.mkdir(exist_ok=True)
 
 
 def append_json(filepath: Path, entry: dict):
     """Append an entry to a JSON array file."""
-    ensure_session_dir()
+    ensure_session_dir(filepath.parent)
     entries = []
     if filepath.exists():
         try:
@@ -54,7 +96,7 @@ def append_json(filepath: Path, entry: dict):
     filepath.write_text(json.dumps(entries, indent=2))
 
 
-def record_agent(input_data: dict):
+def record_agent(input_data: dict, session_dir: Path):
     """Record an Agent dispatch."""
     tool_input = input_data.get("tool_input", {})
     tool_response = input_data.get("tool_response", {})
@@ -77,11 +119,12 @@ def record_agent(input_data: dict):
         "timestamp": datetime.utcnow().isoformat(),
     }
 
-    append_json(AGENTS_FILE, entry)
-    log_debug(f"Recorded agent: {entry['subagent_type']} (id: {agent_id})")
+    agents_file = session_dir / "agents.json"
+    append_json(agents_file, entry)
+    log_debug(f"Recorded agent: {entry['subagent_type']} (id: {agent_id}) -> {session_dir}")
 
 
-def record_bash_event(input_data: dict):
+def record_bash_event(input_data: dict, session_dir: Path):
     """Record interesting Bash events (pytest, gh api, gh pr)."""
     tool_input = input_data.get("tool_input", {})
     tool_response = input_data.get("tool_response", {})
@@ -128,6 +171,12 @@ def record_bash_event(input_data: dict):
             "pr_url": pr_url,
         }
 
+    # gh pr comment with round findings (Automated Review — Round N)
+    elif re.search(r"\bgh\s+pr\s+comment\b", command) and re.search(r"Automated Review.*Round \d", command):
+        event = {
+            "type": "pr_comment_round",
+        }
+
     # gh pr comment with Final Summary
     elif re.search(r"\bgh\s+pr\s+comment\b", command) and "Final Summary" in command:
         event = {
@@ -137,8 +186,9 @@ def record_bash_event(input_data: dict):
     if event:
         event["timestamp"] = datetime.utcnow().isoformat()
         event["command_preview"] = command[:100]
-        append_json(EVENTS_FILE, event)
-        log_debug(f"Recorded event: {event['type']}")
+        events_file = session_dir / "events.json"
+        append_json(events_file, event)
+        log_debug(f"Recorded event: {event['type']} -> {session_dir}")
 
 
 def main():
@@ -149,11 +199,12 @@ def main():
         sys.exit(0)
 
     tool_name = input_data.get("tool_name", "")
+    session_dir = resolve_session_dir(input_data)
 
     if tool_name == "Agent":
-        record_agent(input_data)
+        record_agent(input_data, session_dir)
     elif tool_name == "Bash":
-        record_bash_event(input_data)
+        record_bash_event(input_data, session_dir)
 
     sys.exit(0)
 

@@ -5,12 +5,18 @@ Claude Code PreToolUse Hook: Workflow gate — blocks commit/PR if required phas
 Reads .session/manifest.json (created by session_init.sh) and
 .session/agents.json + .session/events.json (written by agent_recorder.py).
 
-Blocks:
-- git commit: if Phase 0 architect was not dispatched
-- gh pr comment "Final Summary": if review agents not dispatched or
+Gates:
+- git commit: blocks if Phase 0 architect was not dispatched or tests not run
+- gh pr comment "Final Summary": blocks if review agents not dispatched or
   external review not checked
+- gh pr merge: blocks if CI checks are failing or pending
+- gh pr merge: blocks if run from feature worktree (must use main repo)
+- git worktree add: blocks if target is inside the project (must use ~/Developer/)
 
 Does NOT fire if .session/manifest.json doesn't exist (non-workflow commits).
+
+Worktree-aware: resolves .session/ from the command's cd prefix so each
+worktree's gates are independent.
 
 Exit codes:
 - 0: Allow the command
@@ -23,11 +29,23 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-SESSION_DIR = Path(".session")
-MANIFEST_FILE = SESSION_DIR / "manifest.json"
-AGENTS_FILE = SESSION_DIR / "agents.json"
-EVENTS_FILE = SESSION_DIR / "events.json"
 DEBUG_LOG = Path(__file__).parent / "hook_debug.log"
+
+
+def resolve_session_dir_from_command(command: str) -> Path:
+    """Extract the worktree path from a 'cd <path> &&' prefix in a Bash command.
+
+    Hooks run from the main repo CWD, but git commit/gh pr comment commands
+    target a worktree via 'cd ~/Developer/<name> && ...'. We need to find
+    the .session/ directory in that worktree, not in the main repo.
+    """
+    cd_match = re.match(r"cd\s+(~?/[^\s;&|]+)", command)
+    if cd_match:
+        cd_path = Path(cd_match.group(1)).expanduser()
+        session = cd_path / ".session"
+        if session.is_dir():
+            return session
+    return Path(".session")
 
 
 def log_debug(message: str):
@@ -38,7 +56,7 @@ def log_debug(message: str):
         pass
 
 
-def load_json(filepath: Path):
+def load_json(filepath: Path) -> "list | dict":
     if not filepath.exists():
         return [] if "agents" in filepath.name or "events" in filepath.name else {}
     try:
@@ -102,7 +120,7 @@ def check_required_events(manifest: dict, events: list, required_event_keys: lis
     return missing
 
 
-def check_gate(gate_name: str, manifest: dict, agents: list, events: list):
+def check_gate(gate_name: str, manifest: dict, agents: list, events: list) -> "str | None":
     """Check a specific gate. Returns error message if blocked, None if passed."""
     gates = manifest.get("gates", {})
     gate = gates.get(gate_name)
@@ -140,50 +158,145 @@ def main():
     if tool_name != "Bash":
         sys.exit(0)
 
-    # Only enforce if a session manifest exists
-    if not MANIFEST_FILE.exists():
-        sys.exit(0)
+    # Resolve the correct .session/ directory from the command's cd prefix
+    session_dir = resolve_session_dir_from_command(command)
+    manifest_file = session_dir / "manifest.json"
+    agents_file = session_dir / "agents.json"
+    events_file = session_dir / "events.json"
 
-    manifest = load_json(MANIFEST_FILE)
-    agents = load_json(AGENTS_FILE)
-    events = load_json(EVENTS_FILE)
+    # Only enforce manifest-based gates if a session manifest exists
+    if manifest_file.exists():
+        manifest = load_json(manifest_file)
+        agents = load_json(agents_file)
+        events = load_json(events_file)
 
-    # Gate: git commit
-    if re.search(r"\bgit\s+commit\b", command):
-        errors = check_gate("git_commit", manifest, agents, events)
-        if errors:
-            log_debug(f"Blocked git commit — missing:\n{errors}")
-            print(
-                f"Workflow gate: cannot commit — required phases not completed.\n"
-                f"\n"
-                f"Missing:\n{errors}\n"
-                f"\n"
-                f"The session recorder (.session/agents.json) shows these phases were\n"
-                f"not executed. Run the missing phases before committing.\n"
-                f"\n"
-                f"Session data: {SESSION_DIR}/",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+        # Gate: git commit
+        if re.search(r"\bgit\s+commit\b", command):
+            errors = check_gate("git_commit", manifest, agents, events)
+            if errors:
+                log_debug(f"Blocked git commit — missing:\n{errors}")
+                print(
+                    f"Workflow gate: cannot commit — required phases not completed.\n"
+                    f"\n"
+                    f"Missing:\n{errors}\n"
+                    f"\n"
+                    f"The session recorder (.session/agents.json) shows these phases were\n"
+                    f"not executed. Run the missing phases before committing.\n"
+                    f"\n"
+                    f"Session data: {session_dir}/",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
 
-    # Gate: gh pr comment with Final Summary
-    if re.search(r"\bgh\s+pr\s+comment\b", command) and "Final Summary" in command:
-        errors = check_gate("final_summary", manifest, agents, events)
-        if errors:
-            log_debug(f"Blocked Final Summary — missing:\n{errors}")
-            print(
-                f"Workflow gate: cannot post Final Summary — required phases not completed.\n"
-                f"\n"
-                f"Missing:\n{errors}\n"
-                f"\n"
-                f"The session recorder (.session/) shows these phases were not executed.\n"
-                f"Run the missing phases before posting the Final Summary.\n"
-                f"\n"
-                f"To check external reviews:\n"
-                f"  gh api repos/{{owner}}/{{repo}}/pulls/{{number}}/comments --jq 'length'",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+        # Gate: gh pr comment with Final Summary
+        if re.search(r"\bgh\s+pr\s+comment\b", command) and "Final Summary" in command:
+            errors = check_gate("final_summary", manifest, agents, events)
+            if errors:
+                log_debug(f"Blocked Final Summary — missing:\n{errors}")
+                print(
+                    f"Workflow gate: cannot post Final Summary — required phases not completed.\n"
+                    f"\n"
+                    f"Missing:\n{errors}\n"
+                    f"\n"
+                    f"The session recorder (.session/) shows these phases were not executed.\n"
+                    f"Run the missing phases before posting the Final Summary.\n"
+                    f"\n"
+                    f"To check external reviews:\n"
+                    f"  gh api repos/{{owner}}/{{repo}}/pulls/{{number}}/comments --jq 'length'",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+    # Gate: gh pr merge — block if CI is not green (always active, no manifest needed)
+    if re.search(r"\bgh\s+pr\s+merge\b", command):
+        pr_ref_match = re.search(r"gh\s+pr\s+merge\s+(\S+)", command)
+        pr_ref = pr_ref_match.group(1) if pr_ref_match else ""
+
+        if pr_ref:
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    ["gh", "pr", "checks", pr_ref, "--json", "state,name"],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if result.returncode == 0:
+                    checks = json.loads(result.stdout)
+                    failing = [c for c in checks if c.get("state") not in ("SUCCESS", "SKIPPED", "NEUTRAL")]
+                    pending = [c for c in checks if c.get("state") in ("PENDING", "IN_PROGRESS", "QUEUED")]
+
+                    if failing and not pending:
+                        names = ", ".join(c.get("name", "?") for c in failing)
+                        log_debug(f"Blocked merge — CI failing: {names}")
+                        print(
+                            f"Workflow gate: cannot merge — CI checks are failing.\n"
+                            f"\n"
+                            f"Failing checks: {names}\n"
+                            f"\n"
+                            f"Fix the failing checks before merging.\n"
+                            f"  gh pr checks {pr_ref}\n"
+                            f"  gh run view <id> --log-failed",
+                            file=sys.stderr,
+                        )
+                        sys.exit(2)
+
+                    if pending:
+                        names = ", ".join(c.get("name", "?") for c in pending)
+                        log_debug(f"Blocked merge — CI still running: {names}")
+                        print(
+                            f"Workflow gate: cannot merge — CI checks still running.\n"
+                            f"\n"
+                            f"Pending checks: {names}\n"
+                            f"\n"
+                            f"Wait for CI to complete before merging.\n"
+                            f"  gh pr checks {pr_ref} --watch",
+                            file=sys.stderr,
+                        )
+                        sys.exit(2)
+            except Exception as e:
+                log_debug(f"CI check failed (allowing merge): {e}")
+
+    # Gate: gh pr merge must run from main worktree, not feature worktree
+    if re.search(r"\bgh\s+pr\s+merge\b", command):
+        cd_match = re.match(r"cd\s+(~?/[^\s;&|]+)", command)
+        if cd_match:
+            merge_path = Path(cd_match.group(1)).expanduser()
+            git_marker = merge_path / ".git"
+            if git_marker.is_file():
+                log_debug(f"Blocked merge from worktree: {merge_path}")
+                print(
+                    f"Workflow gate: cannot run gh pr merge from a feature worktree.\n"
+                    f"\n"
+                    f"  Target: {merge_path}\n"
+                    f"  .git is a file (worktree), not a directory (main repo)\n"
+                    f"\n"
+                    f"gh pr merge tries to 'git checkout main' locally, which fails in\n"
+                    f"a worktree because main is checked out in the parent repo.\n"
+                    f"Run from the main worktree instead:\n"
+                    f"  MAIN=$(git worktree list | head -1 | awk '{{print $1}}')\n"
+                    f"  cd $MAIN && gh pr merge <number> --squash",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+
+    # Gate: git worktree add must NOT target inside the project directory
+    if re.search(r"\bgit\s+worktree\s+add\b", command):
+        wt_target_match = re.search(r"git\s+worktree\s+add\s+(~?/[^\s]+)", command)
+        if wt_target_match:
+            wt_target = wt_target_match.group(1)
+            if "/Developer/" not in wt_target and "~/" not in wt_target:
+                log_debug(f"Blocked worktree inside project: {wt_target}")
+                print(
+                    f"Workflow gate: worktree must be at ~/Developer/<name>, not inside the project.\n"
+                    f"\n"
+                    f"  Target: {wt_target}\n"
+                    f"\n"
+                    f"Create worktrees as siblings: git worktree add ~/Developer/<branch-name>",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
 
     sys.exit(0)
 

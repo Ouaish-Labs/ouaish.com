@@ -94,7 +94,7 @@ git pull origin main
 
 ### 3. Create Worktree
 
-**Location: `~/Developer/<branch-name>`** — NEVER inside the project folder.
+**Location: `~/Developer/<branch-name>`** — NEVER inside the project folder. The `workflow_gate.py` hook blocks `git worktree add` if the target path is not under `~/Developer/`.
 
 ```bash
 # Create worktree with new branch off main
@@ -190,7 +190,8 @@ fi
 
 This creates `.session/manifest.json` with required phases. From this point:
 - `agent_recorder.py` (PostToolUse hook) automatically tracks every Agent dispatch and key Bash events
-- `workflow_gate.py` (PreToolUse hook) will block `git commit` and `gh pr comment "Final Summary"` if required phases are missing
+- `workflow_gate.py` (PreToolUse hook) will block `git commit`, `gh pr comment "Final Summary"`, and `gh pr merge` if required phases/CI are not satisfied
+- `agent_gate.py` (PreToolUse hook) will block review agents using Haiku, re-dispatches that should be resumes, fixer agents dispatched before findings are posted, and agents missing worktree cd instructions
 
 **If `scripts/workflow/session_init.sh` doesn't exist** (project hasn't installed workflow scripts), skip this step. The workflow gate is backward compatible — no manifest means no enforcement.
 
@@ -449,6 +450,8 @@ This reads `.session/agents.json` and `.session/events.json` (written by `agent_
 **If `scripts/workflow/session_summary.sh` doesn't exist** (project hasn't installed workflow scripts), fall back to manually posting a compliance comment with the data you have.
 
 **If the script shows ❌ for any phase, address it before proceeding to Phase C½.**
+
+> **Gate note:** The `agent_gate.py` hook will block fixer agent dispatch if no round comment has been posted to the PR yet. Ensure the Step 1 `gh pr comment` has completed before dispatching the fixer in Step 2.
 
 ### 5. Report to User
 
@@ -736,6 +739,12 @@ gh pr merge <number> --merge --delete-branch
 cd ~/Developer/<branch-name>
 gh pr merge <number> --merge --delete-branch  # ← silent partial success
 ```
+
+The `workflow_gate.py` hook independently enforces both rules:
+- **CI gate:** blocks `gh pr merge` if any CI checks are failing or still running
+- **Worktree gate:** blocks `gh pr merge` if the `cd` target is a worktree (`.git` is a file, not a directory)
+
+NEVER suggest or attempt merge until ALL CI checks are green.
 
 ### Cleanup
 
