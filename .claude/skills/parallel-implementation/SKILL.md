@@ -351,36 +351,25 @@ Common plan-execution divergences to watch for:
 - Plan says "verify Docker execution" → agent verified imports only
 - Plan says "check external reviewer comments" → agent skipped review loop
 
-### Pre-commit entry checklist (mandatory)
+### Workflow gate enforcement (automatic)
 
-Before staging files, fill out this checklist by **running the commands and pasting the output**. No yes/no fields — every item requires live data that can only come from actually running the command.
+The `workflow_gate.py` PreToolUse hook will **block `git commit`** if `.session/manifest.json` exists and required phases are missing. You don't need to fill out a checklist — the hook checks `.session/agents.json` (written automatically by `agent_recorder.py` every time you dispatch an Agent) and `.session/events.json` (written for pytest, gh api, gh pr calls).
+
+If the commit is blocked, the hook tells you exactly what's missing:
 
 ```
-Pre-commit checklist:
+Workflow gate: cannot commit — required phases not completed.
 
-1. Architect agent ID: ___
-   (paste the agent ID returned from Phase 0 dispatch — if missing, Phase 0 was skipped)
+Missing:
+  - phase_0: Architect analysis (expected: feature-dev:code-architect)
 
-2. Plan reconciliation — paste verify commands and results:
-   ┌─────────────────────────────────────────────────
-   │ Plan Verify item              │ Ran? │ Result
-   │ ruff check src/services/...   │  Y   │ exit 0
-   │ pytest tests/test_foo.py      │  Y   │ 4/4 pass
-   │ ...                           │      │
-   └─────────────────────────────────────────────────
-   (every row from the Phase 1 plan's Verify column must appear here)
-
-3. Paste last 5 lines of test output:
-   ___
-   (the orchestrator can re-run to verify — this catches "tests: pass" claims without running them)
-
-4. Paste lint + typecheck exit codes:
-   lint: ___    typecheck: ___
+The session recorder (.session/agents.json) shows these phases were
+not executed. Run the missing phases before committing.
 ```
 
-**Why paste, not report:** A model can write "✅ pass" without running the command. It cannot fabricate test output that matches the actual test suite without running the tests. Pasting live output is fabrication-resistant.
+**This replaces the self-reported compliance checklist.** The hooks record what actually happened — the model can't skip Phase 0 and commit anyway.
 
-**If any item is blank or shows failures, you must fix it or explain to the user why you're committing anyway.**
+**If no `.session/manifest.json` exists** (non-workflow commits, or projects that haven't run `session_init.sh`), the gate does nothing — fully backward compatible.
 
 ⚠️ Order is: **test → stage → commit**. NEVER stage then test.
 
