@@ -50,6 +50,16 @@
             "timeout": 5000
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/workflow_gate.py",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -90,6 +100,16 @@
             "type": "command",
             "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/ruff_syntax_check.py",
             "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/jimmyzhan/Developer/ouaish/ouaish.com/.claude/hooks/agent_recorder.py",
+            "timeout": 5000
           }
         ]
       }

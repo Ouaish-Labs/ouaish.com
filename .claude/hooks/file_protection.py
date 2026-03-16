@@ -35,6 +35,11 @@ DEFAULT_PROTECTED_PATTERNS = [
         r"\.claude/settings\.json$",
         ".claude/settings.json is protected to prevent self-modification by hooks.",
     ),
+    # Prevent model from disabling its own enforcement
+    (
+        r"\.claude/hooks/.*\.py$",
+        "Hook files are protected — the model cannot disable its own enforcement.",
+    ),
 ]
 
 
